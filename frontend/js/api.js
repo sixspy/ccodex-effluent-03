@@ -38,6 +38,8 @@ export function createApi(getToken, onUnauthorized) {
     createRelease: (body) => request("/api/releases", { method: "POST", body: JSON.stringify(body) }),
     seals: () => request("/api/seals"),
     createSeal: (body) => request("/api/seals", { method: "POST", body: JSON.stringify(body) }),
+    createSealDraft: (body) => request("/api/seals/draft", { method: "POST", body: JSON.stringify(body) }),
+    promoteSeal: (body) => request("/api/seals/promote", { method: "POST", body: JSON.stringify(body) }),
     permits: () => request("/api/permits"),
     permit: (code) => request("/api/permits/" + encodeURIComponent(code)),
     createPermit: (body) => request("/api/permits", { method: "POST", body: JSON.stringify(body) }),

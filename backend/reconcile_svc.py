@@ -77,9 +77,9 @@ def _reconcile_permit(conn, permit_code: str) -> dict:
             }
         )
     seal_rows = conn.execute(
-        """SELECT d.seal_ref, d.sample_generation, s.sample_code
+        """SELECT d.seal_ref, d.sample_generation, d.status, s.sample_code
            FROM discharge_seals d JOIN sample_batches s ON s.id=d.sample_id
-           WHERE s.permit_ref=?""",
+           WHERE s.permit_ref=? AND d.status='已封批'""",
         (permit_code,),
     ).fetchall()
     return {
@@ -116,12 +116,15 @@ def proof_sample(sample_code: str, authorization: AuthHeader = None):
         ).fetchall()
         open_holds = [h for h in holds if h["status"] == "开放"]
         closed = [h for h in holds if h["status"] == "已关闭"]
+        formal_seals = [s for s in seals if s["status"] == "已封批"]
         return {
             "sample_code": sample_code,
             "status": sample["status"],
             "generation": sample["generation"],
             "released": any(r["status"] == "已准排" for r in releases),
-            "sealed": any(s["status"] == "已封批" for s in seals),
+            # 已封灯与旁路开放互斥：只认正式区封批，影子草稿/作废不计
+            "sealed": len(formal_seals) > 0 and len(open_holds) == 0,
+            "bypass_open": len(open_holds) > 0,
             "exceed_closed": len(open_holds) == 0 and (len(closed) > 0 or sample["status"] != "旁路挂起"),
             "holds": [dict(h) for h in holds],
             "releases": [dict(r) for r in releases],

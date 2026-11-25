@@ -79,8 +79,14 @@ createApp({
       samples.value.filter((s) => s.status === "已裁定")
     );
     const sealableSamples = computed(() =>
-      samples.value.filter((s) => ["已裁定", "已准排"].includes(s.status))
+      samples.value.filter(
+        (s) => ["已裁定", "已准排"].includes(s.status) && !s.bypass_open
+      )
     );
+    const sealSelectedBypassOpen = computed(() => {
+      const cur = samples.value.find((s) => s.id === sealForm.value.sample_id);
+      return Boolean(cur && cur.bypass_open);
+    });
 
     function statusClass(s) {
       if (!s) return "muted";
@@ -171,6 +177,15 @@ createApp({
         snapshot: sealForm.value.snapshot || null,
       }));
     }
+    async function createSealDraft() {
+      await flash(() => api.createSealDraft({
+        sample_id: sealForm.value.sample_id,
+        snapshot: sealForm.value.snapshot || null,
+      }));
+    }
+    async function promoteSealDraft() {
+      await flash(() => api.promoteSeal({ sample_id: sealForm.value.sample_id }));
+    }
     async function createPermit() { await flash(() => api.createPermit(permitForm.value)); }
     async function createLineage() {
       await flash(() => api.createLineage({
@@ -223,9 +238,11 @@ createApp({
       reconOne, reconAllItems, proofOne, reconCode, proofCode,
       plantForm, outfallForm, sampleForm, releaseForm, sealForm, permitForm,
       lineageForm, labForm, sludgeForm, releasableSamples, sealableSamples,
+      sealSelectedBypassOpen,
       login, logout, refresh, statusClass, sampleClass, fmtMetrics,
       loadPlant, loadSample, createPlant, createOutfall, createSample,
-      closeExceed, createRelease, createSeal, createPermit, createLineage,
+      closeExceed, createRelease, createSeal, createSealDraft, promoteSealDraft,
+      createPermit, createLineage,
       loadReconcile, loadReconcileOne, loadProof, enqueueLab, enqueueSludge,
     };
   },

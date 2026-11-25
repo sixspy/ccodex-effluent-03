@@ -36,7 +36,10 @@ def _next_sample_code(conn, outfall_id: int) -> str:
 def list_samples(authorization: AuthHeader = None, status: str | None = None):
     require_user(authorization)
     with connect() as conn:
-        q = """SELECT s.*, o.outfall_code, p.plant_code FROM sample_batches s
+        q = """SELECT s.*, o.outfall_code, p.plant_code,
+                      EXISTS(SELECT 1 FROM exceed_holds h
+                             WHERE h.sample_id=s.id AND h.status='开放') AS bypass_open
+               FROM sample_batches s
                JOIN outfalls o ON o.id=s.outfall_id
                JOIN plants p ON p.id=o.plant_id"""
         if status:
@@ -49,6 +52,8 @@ def list_samples(authorization: AuthHeader = None, status: str | None = None):
         for r in rows:
             d = dict(r)
             d["metrics"] = json.loads(d["metrics"] or "{}")
+            # 旁路开放标志以开放挂起实际存在为准（与详情/封批/对账同源），非只看批态
+            d["bypass_open"] = bool(d["bypass_open"])
             items.append(d)
         return {"items": items}
 
@@ -74,6 +79,9 @@ def get_sample(sample_id: int, authorization: AuthHeader = None):
             "SELECT * FROM exceed_holds WHERE sample_id=? ORDER BY id DESC",
             (sample_id,),
         ).fetchall()
+        open_holds = [h for h in holds if h["status"] == "开放"]
+        # 旁路开放标志随批次详情同源回传，采样页批态可追责
+        data["bypass_open"] = len(open_holds) > 0
         seals = conn.execute(
             "SELECT * FROM discharge_seals WHERE sample_id=? ORDER BY id DESC",
             (sample_id,),

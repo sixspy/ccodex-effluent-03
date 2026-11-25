@@ -9,26 +9,34 @@ from db import connect, now_iso, write_audit
 router = APIRouter(tags=["locks"])
 
 
+def _persist(statement: str, params: tuple) -> None:
+    """独立短事务落锁/争用痕，不随业务请求的回滚而丢失。"""
+    with connect() as own:
+        own.execute(statement, params)
+        own.commit()
+
+
 def require_lock(conn, lock_key: str, holder: str) -> None:
     row = conn.execute(
         "SELECT holder FROM effluent_locks WHERE lock_key=?", (lock_key,)
     ).fetchone()
     if row and row["holder"] != holder:
-        conn.execute(
+        # 争用痕独立提交：后到会话被顶回时，痕迹必须留库（后到只记争用痕）
+        _persist(
             """INSERT INTO contention_log(lock_key,actor,action,detail,created_at)
                VALUES (?,?,?,?,?)""",
             (lock_key, holder, "争用失败", f"持有人={row['holder']}", now_iso()),
         )
         raise HTTPException(409, f"锁被占用：{lock_key} 持有人 {row['holder']}")
     if not row:
-        conn.execute(
+        _persist(
             "INSERT INTO effluent_locks(lock_key,holder,acquired_at) VALUES (?,?,?)",
             (lock_key, holder, now_iso()),
         )
 
 
 def release(conn, lock_key: str, holder: str) -> None:
-    conn.execute(
+    _persist(
         "DELETE FROM effluent_locks WHERE lock_key=? AND holder=?",
         (lock_key, holder),
     )

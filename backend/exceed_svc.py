@@ -24,7 +24,13 @@ def list_exceeds(authorization: AuthHeader = None, status: str | None = None):
             ).fetchall()
         else:
             rows = conn.execute(q + " ORDER BY h.id DESC").fetchall()
-        return {"items": [dict(r) for r in rows]}
+        items = []
+        for r in rows:
+            d = dict(r)
+            # 旁路开放标志：封批页升代键与对账页已封灯的同源互斥依据
+            d["bypass_open"] = d["status"] == "开放"
+            items.append(d)
+        return {"items": items}
 
 
 @router.post("/api/exceeds/open")
@@ -92,7 +98,7 @@ def open_exceed(body: ExceedOpenIn, authorization: AuthHeader = None):
                 {"hold_key": hold_key, "metric": metric},
             )
             conn.commit()
-            return {"hold_key": hold_key, "metric": metric}
+            return {"hold_key": hold_key, "metric": metric, "bypass_open": True}
         finally:
             release(conn, lock_key, user)
             conn.commit()
@@ -134,7 +140,12 @@ def close_exceed(body: ExceedCloseIn, authorization: AuthHeader = None):
                 {"hold_id": body.hold_id, "note": body.note},
             )
             conn.commit()
-            return {"ok": True, "ticket_adjudicated": True, "sample_adjudicated": True}
+            return {
+                "ok": True,
+                "ticket_adjudicated": True,
+                "sample_adjudicated": True,
+                "bypass_open": False,
+            }
         finally:
             release(conn, lock_key, user)
             conn.commit()
